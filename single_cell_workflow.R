@@ -1,21 +1,80 @@
-library(dplyr)
+setwd("./Desktop/seurat-clustering/data")
+
+# Libraries
 library(Seurat)
 library(patchwork)
+library(tidyverse)
 
-setwd("./Desktop/Coding/seurat-clustering")
+# Load dataset
+lung_cancer.sparse = Read10X_h5(filename = "./data/20k_NSCLC_DTC_3p_nextgem_Multiplex_count_raw_feature_bc_matrix.h5")
 
-pbmc.data <- Read10X(data.dir = "./data/filtered_gene_bc_matrices/hg19/")
-pbmc <- CreateSeuratObject(counts = pbmc.data, project = "pbmc3k", min.cells = 3, min.features = 200)
-pbmc
+# Check the modality of the dataset
+str(lung_cancer.sparse)
 
-pbmc.data[c("CD3D", "TCL1A", "MS4A1"), 1:30]
+# Save gene exp matrix to var counts
+counts <- lung_cancer.sparse$`Gene Expression`
 
-dense.size <- object.size(as.matrix(pbmc.data))
-dense.size
+# Keep all the features that are expressed in at least 3 cells, keep all genes that have at least 200 genes
+lung_cancer.seurat.obj <- CreateSeuratObject(counts=counts, project="NSCLC", min.cells=3, min.features=200)
+str(lung_cancer.seurat.obj)
 
-sparse.size <- object.size(pbmc.data)
-sparse.size
+# Quality Control -- filter out low-quality cells
+# A poor quality cell has a low number of genes or molecules detected.
+lung_cancer.seurat.obj[["percent.mt"]] <- PercentageFeatureSet(lung_cancer.seurat.obj, pattern="^MT-")
+View(lung_cancer.seurat.obj@meta.data)
 
-pbmc[["percent.mt"]] <- PercentageFeatureSet(pbmc, pattern = "^MT-")
+VlnPlot(lung_cancer.seurat.obj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+FeatureScatter(lung_cancer.seurat.obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") +
+  geom_smooth(method = 'lm')
 
-VlnPlot(pbmc, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+# Filtering
+lung_cancer.seurat.obj <- subset(lung_cancer.seurat.obj, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & 
+                             percent.mt < 5)
+
+# Normalization
+lung_cancer.seurat.obj <- NormalizeData(lung_cancer.seurat.obj)
+str(lung_cancer.seurat.obj)
+
+# Identify highly variable features
+lung_cancer.seurat.obj <- FindVariableFeatures(lung_cancer.seurat.obj, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(lung_cancer.seurat.obj), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(lung_cancer.seurat.obj)
+LabelPoints(plot = plot1, points = top10, repel = TRUE)
+
+# Scaling
+all.genes <- rownames(lung_cancer.seurat.obj)
+lung_cancer.seurat.obj <- ScaleData(lung_cancer.seurat.obj, features = all.genes)
+
+str(lung_cancer.seurat.obj)
+
+# Linear dimensionality reduction
+lung_cancer.seurat.obj <- RunPCA(lung_cancer.seurat.obj, features = VariableFeatures(object = lung_cancer.seurat.obj))
+
+# visualize PCA
+print(lung_cancer.seurat.obj[["pca"]], dims = 1:5, nfeatures = 5)
+DimHeatmap(lung_cancer.seurat.obj, dims = 1, cells = 500, balanced = TRUE)
+
+# Determine dimensionality
+ElbowPlot(lung_cancer.seurat.obj)
+
+# Clustering
+lung_cancer.seurat.obj <- FindNeighbors(lung_cancer.seurat.obj, dims = 1:15)
+
+lung_cancer.seurat.obj <- FindClusters(lung_cancer.seurat.obj, resolution = c(0.1,0.3, 0.5, 0.7, 1))
+View(lung_cancer.seurat.obj@meta.data)
+
+DimPlot(lung_cancer.seurat.obj, group.by = "RNA_snn_res.0.5", label = TRUE)
+
+# setting identity of clusters
+Idents(lung_cancer.seurat.obj)
+Idents(lung_cancer.seurat.obj) <- "RNA_snn_res.0.1"
+Idents(lung_cancer.seurat.obj)
+
+# Non-linear dimensionality reduction UMAP
+lung_cancer.seurat.obj <- RunUMAP(lung_cancer.seurat.obj, dims = 1:15)
+DimPlot(lung_cancer.seurat.obj, reduction = "umap")
+
