@@ -54,27 +54,68 @@ str(lung_cancer.seurat.obj)
 # Linear dimensionality reduction
 lung_cancer.seurat.obj <- RunPCA(lung_cancer.seurat.obj, features = VariableFeatures(object = lung_cancer.seurat.obj))
 
-# visualize PCA
+# Identify some PCs
 print(lung_cancer.seurat.obj[["pca"]], dims = 1:5, nfeatures = 5)
-DimHeatmap(lung_cancer.seurat.obj, dims = 1, cells = 500, balanced = TRUE)
 
-# Determine dimensionality
+# Visualizing cells and features
+VizDimLoadings(lung_cancer.seurat.obj, dims = 1:2, reduction = "pca")
+DimPlot(lung_cancer.seurat.obj, reduction = "pca")
+
+# DimHeatmap visualizes sources of heterogeneity; helpful for deciding PCs
+DimHeatmap(lung_cancer.seurat.obj, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(lung_cancer.seurat.obj, dims = 1:10, cells = 500, balanced = TRUE)
+
+# Determine dimensionality -- two ways to do this:
+
+# 1) JackStraw procedure: random permutation of a subset of the data
+# and rerun PCA; construct a null-distribution of feature scores;
+# take PCs with low p-value features
+
+lung_cancer.seurat.obj <- JackStraw(lung_cancer.seurat.obj, num.replicate = 100)
+lung_cancer.seurat.obj <- ScoreJackStraw(lung_cancer.seurat.obj, dims = 1:20)
+
+# 2) Elbow plot: heuristic method
 ElbowPlot(lung_cancer.seurat.obj)
 
-# Clustering
-lung_cancer.seurat.obj <- FindNeighbors(lung_cancer.seurat.obj, dims = 1:15)
+# Based on this visualization, the "elbow" can be observed 
+# from PC 6-10, so we can choose a number of dimensions in this range for
+# clustering analysis.
 
+# Clustering: based on the elbow plot heuristic the first 10 PCs were selected,
+# erring on the higher side.
+lung_cancer.seurat.obj <- FindNeighbors(lung_cancer.seurat.obj, dims = 1:10)
 lung_cancer.seurat.obj <- FindClusters(lung_cancer.seurat.obj, resolution = c(0.1,0.3, 0.5, 0.7, 1))
 View(lung_cancer.seurat.obj@meta.data)
 
-DimPlot(lung_cancer.seurat.obj, group.by = "RNA_snn_res.0.5", label = TRUE)
+DimPlot(lung_cancer.seurat.obj, group.by = "RNA_snn_res.0.1", label = TRUE)
 
 # setting identity of clusters
 Idents(lung_cancer.seurat.obj)
 Idents(lung_cancer.seurat.obj) <- "RNA_snn_res.0.1"
 Idents(lung_cancer.seurat.obj)
 
-# Non-linear dimensionality reduction UMAP
-lung_cancer.seurat.obj <- RunUMAP(lung_cancer.seurat.obj, dims = 1:15)
+# Non-linear dimensionality reduction: uses the same number of PCs as 
+# chosen for clustering input, determined by PCA and visualization.
+
+# UMAP
+lung_cancer.seurat.obj <- RunUMAP(lung_cancer.seurat.obj, dims = 1:10)
 DimPlot(lung_cancer.seurat.obj, reduction = "umap")
 
+# tSNE
+lung_cancer.seurat.obj <- RunTSNE(lung_cancer.seurat.obj, dims = 1:10)
+DimPlot(lung_cancer.seurat.obj, reduction = "tsne")
+
+# Differential Gene Expression (DGE) Analysis
+
+# Groups to perform DGE on. Groups 0-7 displayed here which correspond
+# to our 8 clusters.
+levels(lung_cancer.seurat.obj)
+
+lung_cancer.seurat.obj.markers <- FindAllMarkers(lung_cancer.seurat.obj, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+lung_cancer.seurat.obj.markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 2, order_by = avg_log2FC)
+
+# FeaturePlot(lung_cancer.seurat.obj, features = c("APOE", "SNHG9", "CCL5", "IL7R", "MS4A1", "CD37", "S100A9"))
+FeaturePlot(lung_cancer.seurat.obj, features = c("APOE", "SNHG9"))
+            
