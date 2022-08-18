@@ -1,3 +1,11 @@
+# Adapted from:
+# - Seurat - Guided Clustering Tutorial 
+#    https://satijalab.org/seurat/articles/pbmc3k_tutorial.html
+# - How to analyze single-cell RNA-Seq data in R | Detailed Seurat Workflow Tutorial 
+#    https://www.youtube.com/watch?v=5HBzgsz8qyk
+# - Dataset: 20k Mixture of NSCLC DTCs from 7 donors, 3' v3.1 (without intronic reads) 
+#    https://www.10xgenomics.com/resources/datasets/20-k-mixture-of-nsclc-dt-cs-from-7-donors-3-v-3-1-3-1-standard-6-1-0
+
 setwd("./Desktop/seurat-clustering/data")
 
 # Libraries
@@ -116,6 +124,17 @@ lung_cancer.seurat.obj.markers %>%
   group_by(cluster) %>%
   slice_max(n = 2, order_by = avg_log2FC)
 
-# FeaturePlot(lung_cancer.seurat.obj, features = c("APOE", "SNHG9", "CCL5", "IL7R", "MS4A1", "CD37", "S100A9"))
-FeaturePlot(lung_cancer.seurat.obj, features = c("APOE", "SNHG9"))
-            
+FeaturePlot(lung_cancer.seurat.obj, features = c("APOE", "CCL5", "MS4A1", "S100A9",
+                                                 "MGP", "IGLC2", "GZMB", "TPSB2"))
+# FeaturePlot(lung_cancer.seurat.obj, features = c("APOE", "SNHG9"))
+# FeaturePlot(lung_cancer.seurat.obj, features = "S100A9")  
+
+
+# Assign marker IDs to clusters
+new.cluster.ids <- c("APOE", "CCL5", "MS4A1", "S100A9",
+                     "MGP", "IGLC2", "GZMB", "TPSB2")
+names(new.cluster.ids) <- levels(lung_cancer.seurat.obj)
+lung_cancer.seurat.obj <- RenameIdents(lung_cancer.seurat.obj, new.cluster.ids)
+DimPlot(lung_cancer.seurat.obj, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()
+
+
